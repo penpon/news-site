@@ -1,18 +1,21 @@
-// src/components/NewsSection.js
+// frontend/src/components/NewsSection.js
+
 import React, { useEffect, useState } from "react";
 import fetchRSS from "../utils/RSSFetcher";
 import "./NewsSection.css";
 
-const NewsSection = ({ title, feedUrl }) => {
+const NewsSection = ({ title, feedUrls }) => {
   const [articles, setArticles] = useState([]);
 
   useEffect(() => {
     const loadArticles = async () => {
-      const data = await fetchRSS(feedUrl);
-      setArticles(data);
+      const data = await Promise.all(
+        feedUrls.map(url => fetchRSS(url))
+      );
+      setArticles(data.flat());
     };
     loadArticles();
-  }, [feedUrl]);
+  }, [feedUrls]);
 
   return (
     <div className="news-section">

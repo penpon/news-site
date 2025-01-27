@@ -1,3 +1,5 @@
+import sys
+import logging
 from fastapi import FastAPI, HTTPException
 import feedparser
 import aiohttp
@@ -8,9 +10,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from dateutil.parser import parse  # 日付フォーマットの柔軟性を高めるため
 from fastapi import Query
+from itertools import chain
+from urllib.parse import unquote
+from typing import Union
 import os
 
 app = FastAPI()
+
+logging.basicConfig(
+    level=logging.INFO,  # 必要なら DEBUG に変更
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    stream=sys.stdout,  # 標準出力に明示的に出力
+)
+
 
 # CORS設定
 # 環境変数から許可するオリジンを取得
@@ -22,6 +34,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ログ設定を追加
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger("uvicorn")  # uvicornロガーを使用
+logger.setLevel(logging.DEBUG)  # 必要なら DEBUG
 
 # RSSフィードのURLリスト
 RSS_FEEDS = [
@@ -104,43 +124,76 @@ async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
         return []
 
 
-# 全てのRSSフィードから記事を取得し、統合して返すエンドポイント
+# 許可リストを事前処理
+ALLOWED_URLS_SET = {unquote(url) for url in RSS_FEEDS}
+
+
+def is_allowed_url(url):
+    return unquote(url) in ALLOWED_URLS_SET
+
+
+def sort_key(article):
+    try:
+        return parse(article.published, fuzzy=True)
+    except:
+        return datetime.min
+
+
 @app.get("/api/news", response_model=List[Article])
-async def get_news(url: str = Query(None, description="RSS feed URL")):
-    """
-    全てのRSSフィードから記事を取得し、統合して返す。
-    """
-    # URLバリデーションを追加
-    if url is None or not url.strip():
-        raise HTTPException(status_code=400, detail="Invalid or missing URL parameter")
+async def get_news(
+    urls: Union[List[str], None] = Query(default=None, alias="urls"),
+    url: Union[str, None] = Query(default=None, alias="url"),
+):
+    # クエリパラメータを統合
+    all_urls: List[str] = urls if urls else [url]
 
-    # URLがリストに存在するか検証
-    if url not in RSS_FEEDS:
-        raise HTTPException(
-            status_code=400, detail="URL is not in the allowed RSS_FEEDS list"
-        )
+    if not all_urls or any(not u.strip() for u in all_urls):
+        logger.error("Invalid URLs provided")
+        raise HTTPException(status_code=400, detail="Invalid URLs provided")
 
-    # RSSフィードを取得
-    timeout = aiohttp.ClientTimeout(total=10)  # タイムアウト時間を10秒に設定
+    logger.info(f"Received URLs: {all_urls}")
+
+    for url in all_urls:
+        # URL詳細ログ
+        logger.info(f"Processing URL: {unquote(url)}")
+        logger.debug(f"Allowed URLs: {[unquote(u) for u in RSS_FEEDS]}")
+        logger.debug(f"Match result: {is_allowed_url(url)}")
+
+        if not is_allowed_url(url):
+            logger.warning(f"URL not allowed: {unquote(url)}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"URL {unquote(url)} is not in the allowed RSS_FEEDS list",
+            )
+
+    # フィード取得開始ログ
+    logger.info("Starting feed fetching process")
+
+    timeout = aiohttp.ClientTimeout(total=15)
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            articles = await fetch_feed(session, url)
-            # 重複する記事を排除
-            articles = list(
-                {
-                    (article.link, article.title): article for article in articles
-                }.values()
+            articles = await asyncio.gather(
+                *[fetch_feed(session, url) for url in all_urls]
             )
-            # 日付でソート
-            articles.sort(
-                key=lambda x: parse(x.published, fuzzy=True)
-                if x.published
-                else datetime.min,
-                reverse=True,
-            )
-            return articles
+            logger.info(f"Successfully fetched {len(articles)} feeds")
+
+            flattened = list(chain.from_iterable(articles))
+            logger.debug(f"Total articles before deduplication: {len(flattened)}")
+
+            # 日付ソート
+            flattened.sort(key=sort_key, reverse=True)
+            logger.debug("Articles sorted by date")
+
+            # 重複排除
+            seen = set()
+            result = [a for a in flattened if not (a.link in seen or seen.add(a.link))]
+            logger.info(f"Returning {len(result)} unique articles")
+
+            return result
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch news: {str(e)}")
+        logger.error(f"Error fetching news: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # アプリケーションの起動
