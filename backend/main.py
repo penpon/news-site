@@ -15,14 +15,15 @@ from urllib.parse import unquote
 from typing import Union
 import os
 
+# FastAPIアプリケーションの作成
 app = FastAPI()
 
+# ログの設定
 logging.basicConfig(
     level=logging.INFO,  # 必要なら DEBUG に変更
     format="%(asctime)s - %(levelname)s - %(message)s",
     stream=sys.stdout,  # 標準出力に明示的に出力
 )
-
 
 # CORS設定
 # 環境変数から許可するオリジンを取得
@@ -35,11 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# ログ設定を追加
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+# uvicornロガーを使用して詳細なログ設定
 logger = logging.getLogger("uvicorn")  # uvicornロガーを使用
 logger.setLevel(logging.DEBUG)  # 必要なら DEBUG
 
@@ -76,7 +73,7 @@ RSS_FEEDS = [
     "https://www.techno-edge.net/rss20/index.rdf",
 ]
 
-
+# Articleモデルを定義
 class Article(BaseModel):
     title: str
     link: str
@@ -86,26 +83,25 @@ class Article(BaseModel):
 
 
 async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
-    """
-    単一のRSSフィードを取得し、記事リストを返す。
-    """
     try:
         async with session.get(url) as response:
             if response.status != 200:
-                print(f"Failed to fetch {url}: HTTP {response.status}")
+                logger.error(f"Failed to fetch {url}: HTTP {response.status}")
                 return []
             content = await response.text()
-            feed = feedparser.parse(content)
 
-            # フィードにエントリが存在しない場合のエラー処理を追加
+            # 追加: 取得したフィードの内容をログに記録
+            # 最初の500文字を記録
+            logger.debug(f"Fetched content from {url}: {content[:500]}")
+
+            feed = feedparser.parse(content)
             if not feed.entries:
-                print(f"No entries found in feed: {url}")
+                logger.warning(f"No entries found in feed: {url}")
                 return []
 
             articles = []
             for entry in feed.entries:
                 try:
-                    # 公開日の日付解析を追加
                     published = entry.get("published", "")
                     parsed_date = parse(published, fuzzy=True) if published else None
                     article = Article(
@@ -117,21 +113,22 @@ async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
                     )
                     articles.append(article)
                 except Exception as e:
-                    print(f"Error parsing article in {url}: {e}")
+                    logger.error(f"Error parsing article in {url}: {e}")
             return articles
     except Exception as e:
-        print(f"Error fetching {url}: {e}")
+        logger.error(f"Error fetching {url}: {e}")
         return []
 
 
 # 許可リストを事前処理
 ALLOWED_URLS_SET = {unquote(url) for url in RSS_FEEDS}
 
-
+# URLが許可リストにあるか確認
 def is_allowed_url(url):
     return unquote(url) in ALLOWED_URLS_SET
 
 
+# 記事のソートキーを定義
 def sort_key(article):
     try:
         return parse(article.published, fuzzy=True)
@@ -139,6 +136,7 @@ def sort_key(article):
         return datetime.min
 
 
+# ニュースAPIエンドポイント
 @app.get("/api/news", response_model=List[Article])
 async def get_news(
     urls: Union[List[str], None] = Query(default=None, alias="urls"),
@@ -188,7 +186,7 @@ async def get_news(
             seen = set()
             result = [a for a in flattened if not (a.link in seen or seen.add(a.link))]
             logger.info(f"Returning {len(result)} unique articles")
-
+            # logger.info(f"Returning articles: {result}")
             return result
 
     except Exception as e:

@@ -4,3 +4,5 @@ node_modules
 digest.txt
 *swp
 .DS_Store
+package-lock.json
+package.json
