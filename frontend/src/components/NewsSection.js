@@ -1,21 +1,33 @@
 // frontend/src/components/NewsSection.js
+// frontend/src/components/NewsSection.js
 import React, { useEffect, useState } from "react";
 import fetchRSS from "../utils/RSSFetcher";
 import "./NewsSection.css";
 
-const NewsSection = ({ title, feedUrls }) => {
+const NewsSection = ({ title, feedUrls = [] }) => {
+  // ジャンルごとの記事を保持
   const [categorizedArticles, setCategorizedArticles] = useState({});
 
   useEffect(() => {
     const loadArticles = async () => {
       try {
+        // feedUrls のバリデーション
         if (!feedUrls || !Array.isArray(feedUrls) || feedUrls.length === 0) {
-          console.error("Invalid feed URLs:", feedUrls);
+          console.error("Invalid feed URLs:", feedUrls); // 詳細なログ
           return;
         }
 
-        const responses = await Promise.all(feedUrls.map((url) => fetchRSS(url)));
+        // API呼び出しとエラーハンドリング
+        const responses = await Promise.all(
+          feedUrls.map((url) =>
+            fetchRSS(url).catch((err) => {
+              console.error(`Error fetching URL: ${url}`, err);
+              return []; // エラー時は空配列を返す
+            })
+          )
+        );
 
+        // URL をカテゴリ名にマッピング
         const urlToCategory = {
           "https://business.nikkei.com/rss/sns/nb.rdf": "日経ビジネス",
           "https://www.businessinsider.jp/feed/index.xml": "Business Insider",
@@ -38,21 +50,27 @@ const NewsSection = ({ title, feedUrls }) => {
           "https://www.techno-edge.net/rss20/index.rdf": "テクノエッジ - 生成AIウィークリー",
         };
 
+        // レスポンスをカテゴリごとに整理
         const categorized = {};
         responses.forEach((response, index) => {
           const category = urlToCategory[feedUrls[index]] || "その他";
           if (!categorized[category]) {
             categorized[category] = [];
           }
-
-          // 記事データの検証と統合
           if (Array.isArray(response)) {
             categorized[category].push(...response);
           } else {
-            console.warn(`Invalid response format for URL: ${feedUrls[index]}`, response);
+            console.warn(
+              `Response from URL is missing articles: ${feedUrls[index]}`,
+              response
+            );
           }
         });
 
+        // ログ出力
+        console.log("Categorized Articles:", categorized);
+
+        // 状態を更新
         setCategorizedArticles(categorized);
       } catch (error) {
         console.error("Error loading articles:", error);
