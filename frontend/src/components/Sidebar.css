@@ -1,41 +1,38 @@
 /* Sidebar.css */
 
-/* サイドバー */
+
 .sidebar {
-  width: 260px;
   background-color: #2c3e50;
-  color: #fff;
+  color: #ecf0f1;
+  height: 100vh;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
   padding: 20px;
-  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
 }
-
-/* サイドバータイトル */
-.sidebar-title {
-  font-size: 20px;
-  margin-bottom: 15px;
-  color: #ecf0f1;
+.sidebar h1 {
+  font-size: 1.8rem;
+  margin-bottom: 20px;
+  color: #ffffff;
+  text-align: left;
+  font-weight: bold;
 }
-
-/* メニューリスト */
-.menu {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.menu-item {
-  display: block;
-  padding: 10px 15px;
-  color: #ecf0f1;
+.sidebar ul li a {
   text-decoration: none;
-  border-radius: 4px;
+  color: #ecf0f1;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  padding: 10px 15px;
+  border-radius: 5px;
+  transition: all 0.3s ease;
 }
-
-.menu-item:hover {
+.sidebar ul li a:hover {
   background-color: #34495e;
+  color: #1abc9c;
 }
-
-.menu-item.active {
-  background-color: #1abc9c;
+.sidebar .settings {
+  margin-top: auto;
 }
 

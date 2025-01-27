@@ -6,6 +6,7 @@ from typing import List
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
+from dateutil.parser import parse  # 日付フォーマットの柔軟性を高めるため
 import os
 
 app = FastAPI()
@@ -69,28 +70,27 @@ async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
     単一のRSSフィードを取得し、記事リストを返す。
     """
     try:
-        # 非同期でRSSフィードを取得
         async with session.get(url) as response:
             if response.status != 200:
-                # HTTPステータスが200でない場合のエラーログ
-                print(f"Failed to fetch {url}: {response.status}")
+                print(f"Failed to fetch {url}: HTTP {response.status}")
                 return []
             content = await response.text()
             feed = feedparser.parse(content)
             articles = []
             for entry in feed.entries:
-                # RSSフィードのエントリを解析してArticleオブジェクトに変換
-                article = Article(
-                    title=entry.get("title", "No Title"),
-                    link=entry.get("link", ""),
-                    published=entry.get("published", ""),
-                    summary=entry.get("summary", ""),
-                    source=feed.feed.get("title", url),
-                )
-                articles.append(article)
+                try:
+                    article = Article(
+                        title=entry.get("title", "No Title"),
+                        link=entry.get("link", ""),
+                        published=entry.get("published", ""),
+                        summary=entry.get("summary", ""),
+                        source=feed.feed.get("title", url),
+                    )
+                    articles.append(article)
+                except Exception as e:
+                    print(f"Error parsing article in {url}: {e}")
             return articles
     except Exception as e:
-        # RSS取得中の例外をログに出力
         print(f"Error fetching {url}: {e}")
         return []
 
@@ -102,26 +102,20 @@ async def get_news():
     全てのRSSフィードから記事を取得し、統合して返す。
     """
     try:
-        # 非同期セッションを作成
         async with aiohttp.ClientSession() as session:
-            # 全RSSフィードの非同期タスクを作成
             tasks = [fetch_feed(session, url) for url in RSS_FEEDS]
-            # 非同期タスクを並列実行し、逐次処理
             articles = []
             for future in asyncio.as_completed(tasks):
                 articles.extend(await future)
-            # 重複を排除する（リンクを基準に）
             articles = list({article.link: article for article in articles}.values())
-            # 記事を公開日順にソート（公開日が空の場合を考慮）
             articles.sort(
-                key=lambda x: datetime.strptime(x.published, "%a, %d %b %Y %H:%M:%S %Z")
+                key=lambda x: parse(x.published, fuzzy=True)
                 if x.published
                 else datetime.min,
                 reverse=True,
             )
             return articles
     except Exception as e:
-        # エラー発生時にHTTP 500を返す
         raise HTTPException(status_code=500, detail=f"Failed to fetch news: {str(e)}")
 
 

@@ -10,17 +10,17 @@ const Sidebar = () => {
       <nav>
         <ul className="menu">
           <li>
-            <NavLink to="/" className="menu-item" activeClassName="active">
-              ホーム
+            <NavLink to="/" className={({ isActive }) => (isActive ? 'active' : '')}>
+                ホーム
             </NavLink>
           </li>
           <li>
-            <NavLink to="/articles" className="menu-item" activeClassName="active">
+            <NavLink to="/articles" className={({ isActive }) => (isActive ? 'active' : '')}>
               新着記事一覧
             </NavLink>
           </li>
           <li>
-            <NavLink to="/papers" className="menu-item" activeClassName="active">
+            <NavLink to="/papers" className={({ isActive }) => (isActive ? 'active' : '')}>
               新着論文一覧
             </NavLink>
           </li>
