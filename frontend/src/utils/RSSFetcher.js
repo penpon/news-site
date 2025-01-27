@@ -1,6 +1,11 @@
 import axios from "axios";
 
 const fetchRSS = async (url) => {
+    // URLが未定義または空の場合のハンドリング
+  if (!url || typeof url !== "string" || url.trim() === "") {
+    console.error("Invalid URL:", url);
+    return [];
+  }
   try {
     const response = await axios.get(
       `http://localhost:8010/api/news?url=${encodeURIComponent(url)}`

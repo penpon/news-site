@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 from dateutil.parser import parse  # 日付フォーマットの柔軟性を高めるため
+from fastapi import Query
 import os
 
 app = FastAPI()
@@ -64,7 +65,6 @@ class Article(BaseModel):
     source: str
 
 
-# 単一のRSSフィードを取得し、記事リストを返す関数
 async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
     """
     単一のRSSフィードを取得し、記事リストを返す。
@@ -76,13 +76,22 @@ async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
                 return []
             content = await response.text()
             feed = feedparser.parse(content)
+
+            # フィードにエントリが存在しない場合のエラー処理を追加
+            if not feed.entries:
+                print(f"No entries found in feed: {url}")
+                return []
+
             articles = []
             for entry in feed.entries:
                 try:
+                    # 公開日の日付解析を追加
+                    published = entry.get("published", "")
+                    parsed_date = parse(published, fuzzy=True) if published else None
                     article = Article(
                         title=entry.get("title", "No Title"),
                         link=entry.get("link", ""),
-                        published=entry.get("published", ""),
+                        published=parsed_date.isoformat() if parsed_date else "",
                         summary=entry.get("summary", ""),
                         source=feed.feed.get("title", url),
                     )
@@ -97,17 +106,32 @@ async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
 
 # 全てのRSSフィードから記事を取得し、統合して返すエンドポイント
 @app.get("/api/news", response_model=List[Article])
-async def get_news():
+async def get_news(url: str = Query(None, description="RSS feed URL")):
     """
     全てのRSSフィードから記事を取得し、統合して返す。
     """
+    # URLバリデーションを追加
+    if url is None or not url.strip():
+        raise HTTPException(status_code=400, detail="Invalid or missing URL parameter")
+
+    # URLがリストに存在するか検証
+    if url not in RSS_FEEDS:
+        raise HTTPException(
+            status_code=400, detail="URL is not in the allowed RSS_FEEDS list"
+        )
+
+    # RSSフィードを取得
+    timeout = aiohttp.ClientTimeout(total=10)  # タイムアウト時間を10秒に設定
     try:
-        async with aiohttp.ClientSession() as session:
-            tasks = [fetch_feed(session, url) for url in RSS_FEEDS]
-            articles = []
-            for future in asyncio.as_completed(tasks):
-                articles.extend(await future)
-            articles = list({article.link: article for article in articles}.values())
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            articles = await fetch_feed(session, url)
+            # 重複する記事を排除
+            articles = list(
+                {
+                    (article.link, article.title): article for article in articles
+                }.values()
+            )
+            # 日付でソート
             articles.sort(
                 key=lambda x: parse(x.published, fuzzy=True)
                 if x.published
