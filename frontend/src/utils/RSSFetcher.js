@@ -8,32 +8,18 @@ const fetchRSS = async (urls) => {
 
   try {
     const responses = await Promise.all(
-      urls.map(url => 
+      urls.map((url) =>
         axios.get(`http://localhost:8010/api/news?url=${encodeURIComponent(url)}`)
       )
     );
 
-    return responses.flatMap(response => {
-      if (!response.data || typeof response.data !== "string") {
-        console.error("Invalid response format");
+    return responses.flatMap((response) => {
+      if (response.data) {
+        return response.data; // 必要に応じて `response.data.articles` を確認
+      } else {
+        console.error("Invalid response format:", response);
         return [];
       }
-
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(response.data, "text/xml");
-
-      if (xml.querySelector("parsererror")) {
-        console.error("Error parsing XML:", xml.querySelector("parsererror"));
-        return [];
-      }
-
-      const items = xml.querySelectorAll("item");
-      return Array.from(items).map((item) => ({
-        title: item.querySelector("title")?.textContent || "",
-        link: item.querySelector("link")?.textContent || "",
-        description: item.querySelector("description")?.textContent || "",
-        pubDate: item.querySelector("pubDate")?.textContent || "",
-      }));
     });
   } catch (error) {
     console.error("Error fetching RSS feeds:", error.message || error);
@@ -42,3 +28,4 @@ const fetchRSS = async (urls) => {
 };
 
 export default fetchRSS;
+

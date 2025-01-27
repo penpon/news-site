@@ -1,5 +1,4 @@
 // frontend/src/components/NewsSection.js
-
 import React, { useEffect, useState } from "react";
 import fetchRSS from "../utils/RSSFetcher";
 import "./NewsSection.css";
@@ -8,14 +7,36 @@ const NewsSection = ({ title, feedUrls }) => {
   const [articles, setArticles] = useState([]);
 
   useEffect(() => {
-    const loadArticles = async () => {
-      const data = await Promise.all(
-        feedUrls.map(url => fetchRSS(url))
-      );
-      setArticles(data.flat());
-    };
-    loadArticles();
-  }, [feedUrls]);
+  const loadArticles = async () => {
+    try {
+      // フィードごとのデータを取得
+      const responses = await Promise.all(feedUrls.map((url) => fetchRSS(url)));
+
+      // 各レスポンスをログに記録
+      responses.forEach((response, index) => {
+        console.log(`Response for URL ${feedUrls[index]}:`, response);
+      });
+
+      // レスポンスから記事を抽出し、統合
+      const articles = responses.flatMap((response) => {
+        if (Array.isArray(response)) {
+          return response; // 配列データを直接返す場合
+        }
+        console.warn(`Response from URL is missing articles:`, response);
+        return [];
+      });
+
+      console.log("Combined Articles:", articles);
+      setArticles(articles);
+    } catch (error) {
+      console.error("Error loading articles:", error);
+    }
+  };
+
+  loadArticles();
+}, [feedUrls]);
+
+
 
   return (
     <div className="news-section">
@@ -38,3 +59,4 @@ const NewsSection = ({ title, feedUrls }) => {
 };
 
 export default NewsSection;
+
