@@ -4,7 +4,7 @@ import axios from "axios";
 const fetchRSS = async (url) => {
   try {
     const response = await axios.get(
-      `http://localhost:5000/proxy?url=${encodeURIComponent(url)}`
+      `http://localhost:5000/api/news?url=${encodeURIComponent(url)}`
     );
     const parser = new DOMParser();
     const xml = parser.parseFromString(response.data, "text/xml");

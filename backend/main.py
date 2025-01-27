@@ -1,4 +1,3 @@
-# main.py
 from fastapi import FastAPI, HTTPException
 import feedparser
 import aiohttp
@@ -9,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-
+# CORS設定
 origins = [
     "http://localhost:3000",  # Reactのデフォルトポート
     # デプロイ先のフロントエンドURLを追加
@@ -65,16 +64,23 @@ class Article(BaseModel):
     source: str
 
 
+# 単一のRSSフィードを取得し、記事リストを返す関数
 async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
+    """
+    単一のRSSフィードを取得し、記事リストを返す。
+    """
     try:
+        # 非同期でRSSフィードを取得
         async with session.get(url) as response:
             if response.status != 200:
+                # HTTPステータスが200でない場合のエラーログ
                 print(f"Failed to fetch {url}: {response.status}")
                 return []
             content = await response.text()
             feed = feedparser.parse(content)
             articles = []
             for entry in feed.entries:
+                # RSSフィードのエントリを解析してArticleオブジェクトに変換
                 article = Article(
                     title=entry.get("title", "No Title"),
                     link=entry.get("link", ""),
@@ -85,17 +91,29 @@ async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
                 articles.append(article)
             return articles
     except Exception as e:
+        # RSS取得中の例外をログに出力
         print(f"Error fetching {url}: {e}")
         return []
 
 
+# 全てのRSSフィードから記事を取得し、統合して返すエンドポイント
 @app.get("/api/news", response_model=List[Article])
 async def get_news():
-    async with aiohttp.ClientSession() as session:
-        tasks = [fetch_feed(session, url) for url in RSS_FEEDS]
-        results = await asyncio.gather(*tasks)
-        # Flatten the list of lists
-        articles = [article for sublist in results for article in sublist]
-        # ソース別にソート、または日付順にソートするなどの処理が可能
-        articles.sort(key=lambda x: x.published, reverse=True)
-        return articles
+    """
+    全てのRSSフィードから記事を取得し、統合して返す。
+    """
+    try:
+        # 非同期セッションを作成
+        async with aiohttp.ClientSession() as session:
+            # 全RSSフィードの非同期タスクを作成
+            tasks = [fetch_feed(session, url) for url in RSS_FEEDS]
+            # 全てのタスクを並列実行
+            results = await asyncio.gather(*tasks)
+            # 結果をフラット化
+            articles = [article for sublist in results for article in sublist]
+            # 記事を公開日順にソート
+            articles.sort(key=lambda x: x.published, reverse=True)
+            return articles
+    except Exception as e:
+        # エラー発生時にHTTP 500を返す
+        raise HTTPException(status_code=500, detail=f"Failed to fetch news: {str(e)}")
