@@ -22,11 +22,13 @@ app = FastAPI()
 logging.basicConfig(
     level=logging.INFO,  # 必要なら DEBUG に変更
     format="%(asctime)s - %(levelname)s - %(message)s",
-    stream=sys.stdout,  # 標準出力に明示的に出力
+    stream=sys.stdout,
 )
 
+logger = logging.getLogger("rss-fetcher")
+logger.setLevel(logging.DEBUG)  # 詳細なデバッグログの有効化
+
 # CORS設定
-# 環境変数から許可するオリジンを取得
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
@@ -36,24 +38,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# uvicornロガーを使用して詳細なログ設定
-logger = logging.getLogger("uvicorn")  # uvicornロガーを使用
-logger.setLevel(logging.DEBUG)  # 必要なら DEBUG
-
 # RSSフィードのURLリスト
 RSS_FEEDS = [
-    # 日経ビジネス電子版　最新記事
     "https://business.nikkei.com/rss/sns/nb.rdf",
-    # Business Insider
     "https://www.businessinsider.jp/feed/index.xml",
-    # 日経クロステック　IT（情報技術）
     "https://xtech.nikkei.com/rss/xtech-it.rdf",
-    # ITmedia AI＋
     "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml",
-    # はてなブックマーク
     "https://b.hatena.ne.jp/hotentry/it.rss",
     "https://b.hatena.ne.jp/q/ai?users=5&mode=rss&sort=recent",
-    # Zennブログ
     "https://zenn.dev/topics/機械学習/feed",
     "https://zenn.dev/topics/ai/feed",
     "https://zenn.dev/topics/生成ai/feed",
@@ -62,18 +54,17 @@ RSS_FEEDS = [
     "https://zenn.dev/topics/nlp/feed",
     "https://zenn.dev/topics/python/feed",
     "https://zenn.dev/topics/googlecloud/feed",
-    # Google Cloud の公式ブログ、Goole Cloud Japanの公式ブログ
     "https://cloudblog.withgoogle.com/rss/",
     "https://cloudblog.withgoogle.com/ja/rss/",
-    # 株式会社G-gen様のブログ
     "https://blog.g-gen.co.jp/feed",
-    # Hugging Face Daily Papers
     "https://jamesg.blog/2024/05/23/hf-papers-rss/",
-    # テクノエッジ：生成AIウィークリー・生成AIクローズアップ
     "https://www.techno-edge.net/rss20/index.rdf",
 ]
 
-# Articleモデルを定義
+# 許可されたURLセット
+ALLOWED_URLS_SET = {unquote(url) for url in RSS_FEEDS}
+
+
 class Article(BaseModel):
     title: str
     link: str
@@ -82,19 +73,21 @@ class Article(BaseModel):
     source: str
 
 
+def is_allowed_url(url: str) -> bool:
+    """URLが許可リストにあるか確認"""
+    return unquote(url) in ALLOWED_URLS_SET
+
+
 async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
+    """RSSフィードを取得し、パースして記事リストを返す"""
     try:
         async with session.get(url) as response:
             if response.status != 200:
                 logger.error(f"Failed to fetch {url}: HTTP {response.status}")
                 return []
             content = await response.text()
-
-            # 追加: 取得したフィードの内容をログに記録
-            # 最初の500文字を記録
-            logger.debug(f"Fetched content from {url}: {content[:500]}")
-
             feed = feedparser.parse(content)
+
             if not feed.entries:
                 logger.warning(f"No entries found in feed: {url}")
                 return []
@@ -113,59 +106,26 @@ async def fetch_feed(session: aiohttp.ClientSession, url: str) -> List[Article]:
                     )
                     articles.append(article)
                 except Exception as e:
-                    logger.error(f"Error parsing article in {url}: {e}")
+                    logger.error(f"Error parsing article from {url}: {e}")
             return articles
     except Exception as e:
         logger.error(f"Error fetching {url}: {e}")
         return []
 
 
-# 許可リストを事前処理
-ALLOWED_URLS_SET = {unquote(url) for url in RSS_FEEDS}
-
-# URLが許可リストにあるか確認
-def is_allowed_url(url):
-    return unquote(url) in ALLOWED_URLS_SET
-
-
-# 記事のソートキーを定義
-def sort_key(article):
-    try:
-        return parse(article.published, fuzzy=True)
-    except:
-        return datetime.min
-
-
-# ニュースAPIエンドポイント
 @app.get("/api/news", response_model=List[Article])
 async def get_news(
     urls: Union[List[str], None] = Query(default=None, alias="urls"),
     url: Union[str, None] = Query(default=None, alias="url"),
+    limit: int = Query(default=5, ge=1, le=100, alias="limit"),  # デフォルトで5件に設定
 ):
-    # クエリパラメータを統合
-    all_urls: List[str] = urls if urls else [url]
-
+    """
+    ニュースAPIエンドポイント
+    記事数を5件に制限
+    """
+    all_urls = urls if urls else [url]
     if not all_urls or any(not u.strip() for u in all_urls):
-        logger.error("Invalid URLs provided")
         raise HTTPException(status_code=400, detail="Invalid URLs provided")
-
-    logger.info(f"Received URLs: {all_urls}")
-
-    for url in all_urls:
-        # URL詳細ログ
-        logger.info(f"Processing URL: {unquote(url)}")
-        logger.debug(f"Allowed URLs: {[unquote(u) for u in RSS_FEEDS]}")
-        logger.debug(f"Match result: {is_allowed_url(url)}")
-
-        if not is_allowed_url(url):
-            logger.warning(f"URL not allowed: {unquote(url)}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"URL {unquote(url)} is not in the allowed RSS_FEEDS list",
-            )
-
-    # フィード取得開始ログ
-    logger.info("Starting feed fetching process")
 
     timeout = aiohttp.ClientTimeout(total=15)
     try:
@@ -173,29 +133,30 @@ async def get_news(
             articles = await asyncio.gather(
                 *[fetch_feed(session, url) for url in all_urls]
             )
-            logger.info(f"Successfully fetched {len(articles)} feeds")
-
             flattened = list(chain.from_iterable(articles))
-            logger.debug(f"Total articles before deduplication: {len(flattened)}")
 
-            # 日付ソート
-            flattened.sort(key=sort_key, reverse=True)
-            logger.debug("Articles sorted by date")
+            # 日付順にソート（新しい順）
+            flattened.sort(
+                key=lambda a: parse(a.published, fuzzy=True)
+                if a.published
+                else datetime.min,
+                reverse=True,
+            )
 
             # 重複排除
             seen = set()
-            result = [a for a in flattened if not (a.link in seen or seen.add(a.link))]
-            logger.info(f"Returning {len(result)} unique articles")
-            # logger.info(f"Returning articles: {result}")
-            return result
+            unique_articles = [
+                a for a in flattened if not (a.link in seen or seen.add(a.link))
+            ]
 
+            # 記事数を制限
+            limited_articles = unique_articles[:limit]
+            return limited_articles
     except Exception as e:
-        logger.error(f"Error fetching news: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# アプリケーションの起動
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
