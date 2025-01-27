@@ -1,0 +1,35 @@
+/* src/components/NewsSection.css */
+.news-section {
+  margin-bottom: 20px;
+}
+
+.articles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.article-card {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  width: calc(33.333% - 20px);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.article-card h3 {
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.article-card p {
+  font-size: 14px;
+  color: #666;
+}
+
+.article-card small {
+  font-size: 12px;
+  color: #999;
+}
+
