@@ -1,14 +1,18 @@
 // App.js
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Sidebar from "./Sidebar";
+import Sidebar from "./components/Sidebar";
+import "./index.css";
 
 const App = () => {
   return (
     <Router>
-      <div style={{ display: "flex" }}>
+      <div className="container">
+        {/* サイドバー */}
         <Sidebar />
-        <div style={{ marginLeft: "260px", padding: "20px", width: "100%" }}>
+
+        {/* メインコンテンツ */}
+        <div className="main-content">
           <Routes>
             <Route path="/" element={<h1>ホーム</h1>} />
             <Route path="/articles" element={<h1>新着記事一覧</h1>} />
