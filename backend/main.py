@@ -5,15 +5,14 @@ import asyncio
 from typing import List
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
+import os
 
 app = FastAPI()
 
 # CORS設定
-origins = [
-    "http://localhost:3000",  # Reactのデフォルトポート
-    # デプロイ先のフロントエンドURLを追加
-]
-
+# 環境変数から許可するオリジンを取得
+origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -107,13 +106,27 @@ async def get_news():
         async with aiohttp.ClientSession() as session:
             # 全RSSフィードの非同期タスクを作成
             tasks = [fetch_feed(session, url) for url in RSS_FEEDS]
-            # 全てのタスクを並列実行
-            results = await asyncio.gather(*tasks)
-            # 結果をフラット化
-            articles = [article for sublist in results for article in sublist]
-            # 記事を公開日順にソート
-            articles.sort(key=lambda x: x.published, reverse=True)
+            # 非同期タスクを並列実行し、逐次処理
+            articles = []
+            for future in asyncio.as_completed(tasks):
+                articles.extend(await future)
+            # 重複を排除する（リンクを基準に）
+            articles = list({article.link: article for article in articles}.values())
+            # 記事を公開日順にソート（公開日が空の場合を考慮）
+            articles.sort(
+                key=lambda x: datetime.strptime(x.published, "%a, %d %b %Y %H:%M:%S %Z")
+                if x.published
+                else datetime.min,
+                reverse=True,
+            )
             return articles
     except Exception as e:
         # エラー発生時にHTTP 500を返す
         raise HTTPException(status_code=500, detail=f"Failed to fetch news: {str(e)}")
+
+
+# アプリケーションの起動
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", reload=True)
