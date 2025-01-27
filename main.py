@@ -25,12 +25,18 @@ app.add_middleware(
 
 # RSSフィードのURLリスト
 RSS_FEEDS = [
+    # 日経ビジネス電子版　最新記事
     "https://business.nikkei.com/rss/sns/nb.rdf",
+    # Business Insider
     "https://www.businessinsider.jp/feed/index.xml",
+    # 日経クロステック　IT（情報技術）
     "https://xtech.nikkei.com/rss/xtech-it.rdf",
+    # ITmedia AI＋
     "https://rss.itmedia.co.jp/rss/2.0/aiplus.xml",
+    # はてなブックマーク
     "https://b.hatena.ne.jp/hotentry/it.rss",
     "https://b.hatena.ne.jp/q/ai?users=5&mode=rss&sort=recent",
+    # Zennブログ
     "https://zenn.dev/topics/機械学習/feed",
     "https://zenn.dev/topics/ai/feed",
     "https://zenn.dev/topics/生成ai/feed",
@@ -39,10 +45,14 @@ RSS_FEEDS = [
     "https://zenn.dev/topics/nlp/feed",
     "https://zenn.dev/topics/python/feed",
     "https://zenn.dev/topics/googlecloud/feed",
+    # Google Cloud の公式ブログ、Goole Cloud Japanの公式ブログ
     "https://cloudblog.withgoogle.com/rss/",
     "https://cloudblog.withgoogle.com/ja/rss/",
+    # 株式会社G-gen様のブログ
     "https://blog.g-gen.co.jp/feed",
+    # Hugging Face Daily Papers
     "https://jamesg.blog/2024/05/23/hf-papers-rss/",
+    # テクノエッジ：生成AIウィークリー・生成AIクローズアップ
     "https://www.techno-edge.net/rss20/index.rdf",
 ]
 
